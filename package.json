@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "name": "trendies-task",
+=======
+  "name": "trendies_task",
+>>>>>>> 3336502 (Initial commit from Create Next App)
   "version": "0.1.0",
   "private": true,
   "scripts": {
