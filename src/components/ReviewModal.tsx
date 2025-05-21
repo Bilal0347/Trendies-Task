@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { Star } from 'lucide-react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useRouter } from 'next/navigation';
+import { signIn } from '@/lib/auth';
 import {
   Dialog,
   DialogContent,
@@ -20,9 +20,16 @@ interface ReviewModalProps {
   initialRating?: number;
   initialComment?: string;
   isUpdate?: boolean;
+  onReviewSubmitted?: () => void;
 }
 
-export function ReviewModal({ orderId, initialRating, initialComment, isUpdate = false }: ReviewModalProps) {
+export function ReviewModal({
+  orderId,
+  initialRating, 
+  initialComment, 
+  isUpdate = false,
+  onReviewSubmitted
+}: ReviewModalProps) {
   const [rating, setRating] = useState(initialRating || 0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState(initialComment || '');
@@ -30,7 +37,6 @@ export function ReviewModal({ orderId, initialRating, initialComment, isUpdate =
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const supabase = createClientComponentClient();
 
   const handleRatingSubmit = async () => {
     if (rating === 0) {
@@ -43,68 +49,27 @@ export function ReviewModal({ orderId, initialRating, initialComment, isUpdate =
     }
 
     setIsSubmitting(true);
+
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        throw new Error('You must be logged in to submit a rating');
-      }
+      // Ensure we're signed in before submitting
+      await signIn();
 
-      // Check if the order exists and is delivered
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .select('status')
-        .eq('id', orderId)
-        .eq('user_id', user.id)
-        .single();
+      const response = await fetch('/api/ratings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId,
+          rating,
+          comment,
+        }),
+      });
 
-      if (orderError || !order) {
-        throw new Error('Order not found');
-      }
+      const data = await response.json();
 
-      if (order.status !== 'delivered') {
-        throw new Error('Can only rate delivered orders');
-      }
-
-      // Check if a rating already exists
-      const { data: existingRating, error: ratingError } = await supabase
-        .from('ratings')
-        .select('id')
-        .eq('order_id', orderId)
-        .single();
-
-      if (ratingError && ratingError.code !== 'PGRST116') {
-        throw new Error('Failed to check existing rating');
-      }
-
-      if (existingRating) {
-        // Update existing rating
-        const { error: updateError } = await supabase
-          .from('ratings')
-          .update({
-            rating,
-            comment,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingRating.id);
-
-        if (updateError) {
-          throw new Error('Failed to update rating');
-        }
-      } else {
-        // Create new rating
-        const { error: insertError } = await supabase
-          .from('ratings')
-          .insert({
-            order_id: orderId,
-            user_id: user.id,
-            rating,
-            comment,
-          });
-
-        if (insertError) {
-          throw new Error('Failed to create rating');
-        }
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to submit rating');
       }
 
       toast({
@@ -114,6 +79,7 @@ export function ReviewModal({ orderId, initialRating, initialComment, isUpdate =
 
       setIsOpen(false);
       router.refresh();
+      onReviewSubmitted?.();
     } catch (error) {
       console.error('Error submitting rating:', error);
       toast({
@@ -158,14 +124,14 @@ export function ReviewModal({ orderId, initialRating, initialComment, isUpdate =
               </button>
             ))}
           </div>
-          
+
           <Textarea
             placeholder="Write your review (optional)"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             className="min-h-[100px]"
           />
-          
+
           <Button
             onClick={handleRatingSubmit}
             disabled={isSubmitting}

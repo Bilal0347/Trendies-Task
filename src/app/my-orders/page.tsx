@@ -1,8 +1,11 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+"use client";
+
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ReviewModal } from '@/components/ReviewModal';
-import { ToasterWrapper } from '@/components/ToasterWrapper';
+import { useToast } from '@/components/ui/use-toast';
+import { signIn } from '@/lib/auth';
 
 interface Product {
   id: string;
@@ -12,135 +15,124 @@ interface Product {
 }
 
 interface Rating {
+  id: string;
   rating: number;
   comment: string;
 }
 
-interface Order {
+interface BaseOrder {
   id: string;
-  created_at: string;
-  updated_at: string;
-  status: 'pending' | 'delivered';
+  createdAt: string;
+  updatedAt: string;
+  status: string;
   product: Product;
-  rating?: Rating;
 }
 
-interface RawOrder {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  status: 'pending' | 'delivered';
-  products: {
-    id: string;
-    name: string;
-    price: number;
-    image_url: string;
+interface PendingOrder extends BaseOrder {
+  status: 'pending';
+  rating: null;
+}
+
+interface DeliveredOrder extends BaseOrder {
+  status: 'delivered';
+  rating: null;
+}
+
+interface RatedOrder extends BaseOrder {
+  status: 'delivered';
+  rating: Rating;
+}
+
+interface OrdersResponse {
+  pendingOrders: PendingOrder[];
+  deliveredOrders: DeliveredOrder[];
+  ratedOrders: RatedOrder[];
+}
+
+export default function MyOrdersPage() {
+  const [orders, setOrders] = useState<OrdersResponse>({
+    pendingOrders: [],
+    deliveredOrders: [],
+    ratedOrders: []
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  const fetchOrders = async () => {
+    try {
+      // Ensure we're signed in
+      await signIn();
+      
+      const response = await fetch('/api/orders');
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      const data = await response.json();
+      setOrders(data);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load orders. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-  ratings: {
-    rating: number;
-    comment: string;
-  }[] | null;
-}
 
-export default async function MyOrdersPage() {
-  const cookieStore = cookies();
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
-  
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  
-  if (authError || !user) {
-    redirect('/login');
-  }
+  useEffect(() => {
+    fetchOrders();
+  }, [toast]);
 
-  const { data: orders, error: ordersError } = await supabase
-    .from('orders')
-    .select(`
-      id,
-      created_at,
-      updated_at,
-      status,
-      products:product_id (
-        id,
-        name,
-        price,
-        image_url
-      ),
-      ratings (
-        rating,
-        comment
-      )
-    `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
-
-  if (ordersError) {
-    console.error('Error fetching orders:', ordersError);
-    throw new Error('Failed to fetch orders');
-  }
-
-  if (!orders) {
+  if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">My Orders</h1>
-        <p className="text-gray-500">No orders found</p>
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Loading orders...</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
       </div>
     );
   }
 
-  // Transform and categorize orders
-  const transformedOrders = orders.map((order: unknown): Order => {
-    const rawOrder = order as RawOrder;
-    return {
-      id: rawOrder.id,
-      created_at: rawOrder.created_at,
-      updated_at: rawOrder.updated_at,
-      status: rawOrder.status,
-      product: {
-        id: rawOrder.products.id,
-        name: rawOrder.products.name,
-        price: rawOrder.products.price,
-        image_url: rawOrder.products.image_url,
-      },
-      rating: rawOrder.ratings?.[0] ? {
-        rating: rawOrder.ratings[0].rating,
-        comment: rawOrder.ratings[0].comment,
-      } : undefined,
-    };
-  });
-
-  const pendingOrders = transformedOrders.filter(order => order.status === 'pending');
-  const deliveredOrders = transformedOrders.filter(order => order.status === 'delivered' && !order.rating);
-  const ratedOrders = transformedOrders.filter(order => order.status === 'delivered' && order.rating);
-
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">My Orders</h1>
-
+      
       {/* Pending Orders */}
       <section className="mb-12">
         <h2 className="text-2xl font-semibold mb-4">Pending Orders</h2>
-        {pendingOrders.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pendingOrders.map((order) => (
-              <div key={order.id} className="border rounded-lg p-4">
-                <div className="aspect-square relative mb-4">
-                  <img
-                    src={order.product.image_url}
-                    alt={order.product.name}
-                    className="object-cover rounded-lg  h-[300px] w-full"
-                  />
-                </div>
-                <h3 className="font-semibold mb-2">{order.product.name}</h3>
-                <p className="text-gray-600 mb-2">${order.product.price}</p>
-                <p className="text-sm text-gray-500">
-                  Ordered on {new Date(order.created_at).toLocaleDateString()}
-                </p>
-                <div className="mt-2">
-                  <span className="inline-block px-2 py-1 text-sm bg-yellow-100 text-yellow-800 rounded">
+        {orders.pendingOrders.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {orders.pendingOrders.map((order) => (
+              <Card key={order.id}>
+                <CardHeader>
+                  <div className="aspect-square relative mb-4">
+                    <img
+                      src={order.product.image_url}
+                      alt={order.product.name}
+                      className="object-cover rounded-lg h-[300px] w-full"
+                    />
+                  </div>
+                  <CardTitle>{order.product.name}</CardTitle>
+                  <CardDescription>
+                    Ordered on {new Date(order.createdAt).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold text-primary">${order.product.price}</p>
+                </CardContent>
+                <CardFooter>
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
                     Pending
-                  </span>
-                </div>
-              </div>
+                  </Badge>
+                </CardFooter>
+              </Card>
             ))}
           </div>
         ) : (
@@ -151,33 +143,36 @@ export default async function MyOrdersPage() {
       {/* Delivered Orders */}
       <section className="mb-12">
         <h2 className="text-2xl font-semibold mb-4">Delivered Orders</h2>
-        {deliveredOrders.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {deliveredOrders.map((order) => (
-              <div key={order.id} className="border rounded-lg p-4">
-                <div className="aspect-square relative mb-4">
-                  <img
-                    src={order.product.image_url}
-                    alt={order.product.name}
-                    className="object-cover rounded-lg h-[300px] w-full"
-                  />
-                </div>
-                <h3 className="font-semibold mb-2">{order.product.name}</h3>
-                <p className="text-gray-600 mb-2">${order.product.price}</p>
-                <p className="text-sm text-gray-500">
-                  Delivered on {new Date(order.updated_at).toLocaleDateString()}
-                </p>
-                <div className="mt-2">
-                  <span className="inline-block px-2 py-1 text-sm bg-green-100 text-green-800 rounded">
-                    Delivered
-                  </span>
-                </div>
-                {!order.rating && (
-                  <div className="mt-4">
-                    <ReviewModal orderId={order.id} />
+        {orders.deliveredOrders.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {orders.deliveredOrders.map((order) => (
+              <Card key={order.id}>
+                <CardHeader>
+                  <div className="aspect-square relative mb-4">
+                    <img
+                      src={order.product.image_url}
+                      alt={order.product.name}
+                      className="object-cover rounded-lg h-[300px] w-full"
+                    />
                   </div>
-                )}
-              </div>
+                  <CardTitle>{order.product.name}</CardTitle>
+                  <CardDescription>
+                    Delivered on {new Date(order.updatedAt).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold text-primary">${order.product.price}</p>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-4">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">
+                    Delivered
+                  </Badge>
+                  <ReviewModal 
+                    orderId={order.id} 
+                    onReviewSubmitted={fetchOrders}
+                  />
+                </CardFooter>
+              </Card>
             ))}
           </div>
         ) : (
@@ -188,61 +183,66 @@ export default async function MyOrdersPage() {
       {/* Rated Orders */}
       <section>
         <h2 className="text-2xl font-semibold mb-4">Rated Orders</h2>
-        {ratedOrders.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {ratedOrders.map((order) => (
-              <div key={order.id} className="border rounded-lg p-4">
-                <div className="aspect-square relative mb-4">
-                  <img
-                    src={order.product.image_url}
-                    alt={order.product.name}
-                    className="object-cover rounded-lg  h-[300px] w-full"
-                  />
-                </div>
-                <h3 className="font-semibold mb-2">{order.product.name}</h3>
-                <p className="text-gray-600 mb-2">${order.product.price}</p>
-                <p className="text-sm text-gray-500">
-                  Delivered on {new Date(order.updated_at).toLocaleDateString()}
-                </p>
-                <div className="mt-2">
-                  <span className="inline-block px-2 py-1 text-sm bg-blue-100 text-blue-800 rounded">
-                    Rated
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <span
-                        key={star}
-                        className={`text-lg ${
-                          star <= (order.rating?.rating || 0)
-                            ? 'text-yellow-400'
-                            : 'text-gray-300'
-                        }`}
-                      >
-                        ★
-                      </span>
-                    ))}
-                  </div>
-                  {order.rating?.comment && (
-                    <p className="text-sm text-gray-600 mb-4">{order.rating.comment}</p>
-                  )}
-                  <ReviewModal
-                    orderId={order.id}
-                    initialRating={order.rating?.rating}
-                    initialComment={order.rating?.comment}
-                    isUpdate
-                  />
-                </div>
-              </div>
-            ))}
+        {orders.ratedOrders.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {orders.ratedOrders.map((order) => {
+              if (!order.rating) return null;
+              
+              return (
+                <Card key={order.id}>
+                  <CardHeader>
+                    <div className="aspect-square relative mb-4">
+                      <img
+                        src={order.product.image_url}
+                        alt={order.product.name}
+                        className="object-cover rounded-lg h-[300px] w-full"
+                      />
+                    </div>
+                    <CardTitle>{order.product.name}</CardTitle>
+                    <CardDescription>
+                      Delivered on {new Date(order.updatedAt).toLocaleDateString()}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold text-primary mb-4">${order.product.price}</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <span
+                          key={star}
+                          className={`text-lg ${
+                            star <= order.rating.rating
+                              ? 'text-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        >
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                    {order.rating.comment && (
+                      <p className="text-sm text-muted-foreground">{order.rating.comment}</p>
+                    )}
+                  </CardContent>
+                  <CardFooter className="flex flex-col gap-4">
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                      Rated
+                    </Badge>
+                    <ReviewModal
+                      orderId={order.id}
+                      initialRating={order.rating.rating}
+                      initialComment={order.rating.comment}
+                      isUpdate
+                      onReviewSubmitted={fetchOrders}
+                    />
+                  </CardFooter>
+                </Card>
+              );
+            })}
           </div>
         ) : (
           <p className="text-gray-500">No rated orders</p>
         )}
       </section>
-
-      <ToasterWrapper />
     </div>
   );
 } 
