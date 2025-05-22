@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
@@ -46,16 +47,11 @@ export default async function RootLayout({
               <Link href="/" className="text-xl font-bold">
                 Trendies
               </Link>
-              <div className="space-x-4"> 
-                {user ? (
+              <div className="space-x-4">     
                   <Link href="/my-orders" className="hover:text-primary">
                     My Orders
                   </Link>
-                ) : (
-                  <Link href="/login" className="hover:text-primary">
-                    Login
-                  </Link>
-                )}
+
               </div>
             </div>
           </div>

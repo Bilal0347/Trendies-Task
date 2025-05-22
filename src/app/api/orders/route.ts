@@ -19,7 +19,7 @@ interface TransformedOrder {
   createdAt: string;
   updatedAt: string;
   status: string;
-  product: Product;
+  product: Product[];
   rating: Rating | null;
 }
 
@@ -63,7 +63,7 @@ export async function GET() {
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       status: order.status,
-      product: order.products,
+     product: order.products,
       rating: order.ratings?.[0] || null
     }));
 
