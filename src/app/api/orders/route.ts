@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase, signIn } from '@/lib/auth';
+import { supabase, signIn, getSession } from '@/lib/auth';
 
 interface Product {
   id: string;
@@ -25,8 +25,16 @@ interface TransformedOrder {
 
 export async function GET() {
   try {
-    // Ensure we're signed in
+    // Sign in (for development/testing)
     await signIn();
+
+    // Get the session
+    const session = await getSession();
+    const user = session?.user;
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
+    }
 
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
@@ -47,41 +55,33 @@ export async function GET() {
           comment
         )
       `)
+      .eq('user_id', user.id) // Filter by authenticated user's ID
       .order('created_at', { ascending: false });
 
     if (ordersError) {
       console.error('Error fetching orders:', ordersError);
-      return NextResponse.json(
-        { error: 'Failed to fetch orders' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
     }
 
-    // Transform the data to match the expected format
-    const transformedOrders = orders.map((order): TransformedOrder => ({
+    // Transform the data
+    const transformedOrders: TransformedOrder[] = orders.map((order) => ({
       id: order.id,
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       status: order.status,
-     product: order.products,
-      rating: order.ratings?.[0] || null
+      product: order.products,
+      rating: order.ratings?.[0] || null,
     }));
 
-    // Categorize orders
-    const pendingOrders = transformedOrders.filter((order) => order.status === 'pending');
-    const deliveredOrders = transformedOrders.filter((order) => order.status === 'delivered' && !order.rating);
-    const ratedOrders = transformedOrders.filter((order) => order.status === 'delivered' && order.rating);
+    // Categorize
+    const pendingOrders = transformedOrders.filter((o) => o.status === 'pending');
+    const deliveredOrders = transformedOrders.filter((o) => o.status === 'delivered' && !o.rating);
+    const ratedOrders = transformedOrders.filter((o) => o.status === 'delivered' && o.rating);
 
-    return NextResponse.json({
-      pendingOrders,
-      deliveredOrders,
-      ratedOrders
-    });
+    return NextResponse.json({ pendingOrders, deliveredOrders, ratedOrders });
+
   } catch (error) {
     console.error('Error in orders API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
