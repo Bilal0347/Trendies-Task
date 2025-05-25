@@ -10,7 +10,10 @@ interface Product {
 
 interface Rating {
   id: string;
-  rating: number;
+  item_description_accuracy: number;
+  communication_support: number;
+  delivery_speed: number;
+  overall_experience: number;
   comment: string;
 }
 
@@ -51,7 +54,10 @@ export async function GET() {
         ),
         ratings (
           id,
-          rating,
+          item_description_accuracy,
+          communication_support,
+          delivery_speed,
+          overall_experience,
           comment
         )
       `)

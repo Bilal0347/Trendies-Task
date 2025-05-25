@@ -1,59 +1,66 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useRouter } from 'next/navigation';
-import { signIn } from '@/lib/auth';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 
 interface ReviewModalProps {
+  isOpen: boolean;
+  onClose: () => void;
   orderId: string;
-  initialRating?: number;
-  initialComment?: string;
-  isUpdate?: boolean;
+  productId: string;
+  initialRating?: {
+    itemDescriptionAccuracy: number;
+    communicationSupport: number;
+    deliverySpeed: number;
+    overallExperience: number;
+    comment?: string;
+  };
   onReviewSubmitted?: () => void;
 }
 
-export function ReviewModal({
-  orderId,
-  initialRating, 
-  initialComment, 
-  isUpdate = false,
-  onReviewSubmitted
-}: ReviewModalProps) {
-  const [rating, setRating] = useState(initialRating || 0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [comment, setComment] = useState(initialComment || '');
+export function ReviewModal({ isOpen, onClose, orderId, productId, initialRating, onReviewSubmitted }: ReviewModalProps) {
+  const [itemDescriptionAccuracy, setItemDescriptionAccuracy] = useState(initialRating?.itemDescriptionAccuracy || 0);
+  const [communicationSupport, setCommunicationSupport] = useState(initialRating?.communicationSupport || 0);
+  const [deliverySpeed, setDeliverySpeed] = useState(initialRating?.deliverySpeed || 0);
+  const [overallExperience, setOverallExperience] = useState(initialRating?.overallExperience || 0);
+  const [comment, setComment] = useState(initialRating?.comment || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
-  const handleRatingSubmit = async () => {
-    if (rating === 0) {
+  // Reset form when modal opens with new initialRating
+  useEffect(() => {
+    if (isOpen && initialRating) {
+      setItemDescriptionAccuracy(initialRating.itemDescriptionAccuracy);
+      setCommunicationSupport(initialRating.communicationSupport);
+      setDeliverySpeed(initialRating.deliverySpeed);
+      setOverallExperience(initialRating.overallExperience);
+      setComment(initialRating.comment || '');
+    }
+  }, [isOpen, initialRating]);
+
+  const handleSubmit = async () => {
+    if (!itemDescriptionAccuracy || !communicationSupport || !deliverySpeed || !overallExperience) {
       toast({
         title: "Error",
-        description: "Please select a rating before submitting",
+        description: "Please provide all ratings before submitting",
         variant: "destructive",
       });
       return;
     }
 
     setIsSubmitting(true);
-
     try {
-      // Ensure we're signed in before submitting
-      await signIn();
-
       const response = await fetch('/api/ratings', {
         method: 'POST',
         headers: {
@@ -61,30 +68,31 @@ export function ReviewModal({
         },
         body: JSON.stringify({
           orderId,
-          rating,
+          productId,
+          itemDescriptionAccuracy,
+          communicationSupport,
+          deliverySpeed,
+          overallExperience,
           comment,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit rating');
+        throw new Error('Failed to submit rating');
       }
 
       toast({
         title: "Success",
-        description: "Your rating has been submitted successfully",
+        description: initialRating ? "Your review has been updated" : "Thank you for your review!",
       });
-
-      setIsOpen(false);
+      onClose();
       router.refresh();
       onReviewSubmitted?.();
     } catch (error) {
       console.error('Error submitting rating:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to submit rating. Please try again.",
+        description: "Failed to submit rating. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -93,51 +101,121 @@ export function ReviewModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant={isUpdate ? "outline" : "default"} className="w-full">
-          {isUpdate ? 'Update Review' : 'Add Review'}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{isUpdate ? 'Update Review' : 'Write a Review'}</DialogTitle>
+          <DialogTitle>{initialRating ? 'Update Review' : 'Write a Review'}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="flex items-center gap-2">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <button
-                key={star}
-                type="button"
-                onClick={() => setRating(star)}
-                onMouseEnter={() => setHoverRating(star)}
-                onMouseLeave={() => setHoverRating(0)}
-                className="focus:outline-none"
-              >
-                <Star
-                  className={`w-6 h-6 ${
-                    star <= (hoverRating || rating)
-                      ? 'fill-yellow-400 text-yellow-400'
-                      : 'text-gray-300'
-                  }`}
-                />
-              </button>
-            ))}
+        <div className="space-y-6 py-4">
+          {/* 1. Accuracy of item description */}
+          <div>
+            <div className="font-medium mb-2">1. Accuracy of item description</div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setItemDescriptionAccuracy(star)}
+                  className="focus:outline-none"
+                >
+                  <Star
+                    className={`w-6 h-6 ${
+                      star <= itemDescriptionAccuracy
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-gray-300'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
           </div>
 
-          <Textarea
-            placeholder="Write your review (optional)"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            className="min-h-[100px]"
-          />
+          {/* 2. Communication & support */}
+          <div>
+            <div className="font-medium mb-2">2. Communication & support</div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setCommunicationSupport(star)}
+                  className="focus:outline-none"
+                >
+                  <Star
+                    className={`w-6 h-6 ${
+                      star <= communicationSupport
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-gray-300'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Delivery speed */}
+          <div>
+            <div className="font-medium mb-2">3. Delivery speed</div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setDeliverySpeed(star)}
+                  className="focus:outline-none"
+                >
+                  <Star
+                    className={`w-6 h-6 ${
+                      star <= deliverySpeed
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-gray-300'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 4. Overall experience */}
+          <div>
+            <div className="font-medium mb-2">4. Overall experience</div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setOverallExperience(star)}
+                  className="focus:outline-none"
+                >
+                  <Star
+                    className={`w-6 h-6 ${
+                      star <= overallExperience
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-gray-300'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 5. Optional written review */}
+          <div>
+            <div className="font-medium mb-2">Would you like to leave a written review? (Optional but valuable for feedback)</div>
+            <Textarea
+              placeholder="Write your review (optional)"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className="min-h-[100px]"
+            />
+          </div>
 
           <Button
-            onClick={handleRatingSubmit}
+            onClick={handleSubmit}
             disabled={isSubmitting}
             className="w-full"
           >
-            {isSubmitting ? 'Submitting...' : isUpdate ? 'Update Review' : 'Submit Review'}
+            {isSubmitting ? 'Submitting...' : initialRating ? 'Update Review' : 'Submit Review'}
           </Button>
         </div>
       </DialogContent>

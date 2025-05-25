@@ -3,7 +3,10 @@ import { cookies } from 'next/headers';
 import { ProductGrid } from '@/components/ProductGrid';
 
 interface Rating {
-  rating: number;
+  item_description_accuracy: number;
+  communication_support: number;
+  delivery_speed: number;
+  overall_experience: number;
 }
 
 interface Product {
@@ -24,7 +27,10 @@ export default async function Home() {
     .select(`
       *,
       ratings:ratings(
-        rating
+        item_description_accuracy,
+        communication_support,
+        delivery_speed,
+        overall_experience
       )
     `)
     .order('created_at', { ascending: false });
@@ -40,13 +46,35 @@ export default async function Home() {
   }
 
   // Calculate average rating for each product
-  const productsWithRatings = (products as Product[])?.map(product => ({
-    ...product,
-    averageRating: product.ratings?.length 
-      ? product.ratings.reduce((acc: number, curr: Rating) => acc + curr.rating, 0) / product.ratings.length 
-      : 0,
-    totalRatings: product.ratings?.length || 0
-  })) || [];
+  const productsWithRatings = (products as Product[])?.map(product => {
+    const ratings = product.ratings || [];
+    const totalRatings = ratings.length;
+    
+    if (totalRatings === 0) {
+      return {
+        ...product,
+        averageRating: 0,
+        totalRatings: 0
+      };
+    }
+
+    // Calculate average of all four ratings for each review
+    const averageRating = ratings.reduce((acc, curr) => {
+      const reviewAverage = (
+        curr.item_description_accuracy +
+        curr.communication_support +
+        curr.delivery_speed +
+        curr.overall_experience
+      ) / 4;
+      return acc + reviewAverage;
+    }, 0) / totalRatings;
+
+    return {
+      ...product,
+      averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
+      totalRatings
+    };
+  }) || [];
 
   return (
     <div className="container mx-auto p-4">

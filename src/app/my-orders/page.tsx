@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { ReviewModal } from '@/components/ReviewModal';
 import { useToast } from '@/components/ui/use-toast';
 import { signIn } from '@/lib/auth';
+import { Star, StarHalf } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 
 interface Product {
   id: string;
@@ -16,8 +18,11 @@ interface Product {
 
 interface Rating {
   id: string;
-  rating: number;
-  comment: string;
+  item_description_accuracy: number;
+  communication_support: number;
+  delivery_speed: number;
+  overall_experience: number;
+  comment: string | undefined;
 }
 
 interface BaseOrder {
@@ -26,16 +31,15 @@ interface BaseOrder {
   updatedAt: string;
   status: string;
   product: Product;
+  rating: Rating | null;
 }
 
 interface PendingOrder extends BaseOrder {
   status: 'pending';
-  rating: null;
 }
 
 interface DeliveredOrder extends BaseOrder {
   status: 'delivered';
-  rating: null;
 }
 
 interface RatedOrder extends BaseOrder {
@@ -49,6 +53,56 @@ interface OrdersResponse {
   ratedOrders: RatedOrder[];
 }
 
+const calculateAverageRating = (rating: Rating): number => {
+  if (!rating) return 0;
+  const average = (
+    rating.item_description_accuracy +
+    rating.communication_support +
+    rating.delivery_speed +
+    rating.overall_experience
+  ) / 4;
+  return Math.round(average * 10) / 10; // Round to 1 decimal place
+};
+
+const renderStars = (rating: number) => {
+  const stars = [];
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+
+  // Add full stars
+  for (let i = 1; i <= fullStars; i++) {
+    stars.push(
+      <Star
+        key={`full-${i}`}
+        className="w-4 h-4 fill-yellow-400 text-yellow-400"
+      />
+    );
+  }
+
+  // Add half star if needed
+  if (hasHalfStar) {
+    stars.push(
+      <StarHalf
+        key="half"
+        className="w-4 h-4 fill-yellow-400 text-yellow-400"
+      />
+    );
+  }
+
+  // Add empty stars
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+  for (let i = 1; i <= emptyStars; i++) {
+    stars.push(
+      <Star
+        key={`empty-${i}`}
+        className="w-4 h-4 text-gray-300"
+      />
+    );
+  }
+
+  return stars;
+};
+
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<OrdersResponse>({
     pendingOrders: [],
@@ -56,6 +110,7 @@ export default function MyOrdersPage() {
     ratedOrders: []
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [openModalId, setOpenModalId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchOrders = async () => {
@@ -167,8 +222,18 @@ export default function MyOrdersPage() {
                   <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">
                     Delivered
                   </Badge>
+                  <Button 
+                    variant="default" 
+                    className="w-full"
+                    onClick={() => setOpenModalId(order.id)}
+                  >
+                    Add Review
+                  </Button>
                   <ReviewModal 
-                    orderId={order.id} 
+                    isOpen={openModalId === order.id}
+                    onClose={() => setOpenModalId(null)}
+                    orderId={order.id}
+                    productId={order.product.id}
                     onReviewSubmitted={fetchOrders}
                   />
                 </CardFooter>
@@ -186,7 +251,7 @@ export default function MyOrdersPage() {
         {orders.ratedOrders.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {orders.ratedOrders.map((order) => {
-              if (!order.rating) return null;
+              const averageRating = calculateAverageRating(order.rating);
               
               return (
                 <Card key={order.id}>
@@ -204,34 +269,36 @@ export default function MyOrdersPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold text-primary mb-4">${order.product.price}</p>
-                    <div className="flex items-center gap-2 mb-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <span
-                          key={star}
-                          className={`text-lg ${
-                            star <= order.rating.rating
-                              ? 'text-yellow-400'
-                              : 'text-gray-300'
-                          }`}
-                        >
-                          ★
-                        </span>
-                      ))}
+                    <p className="text-2xl font-bold text-primary">${order.product.price}</p>
+                    <div className="mt-2">
+                      <div className="flex items-center gap-1">
+                        {renderStars(averageRating)}
+                      </div>
                     </div>
-                    {order.rating.comment && (
-                      <p className="text-sm text-muted-foreground">{order.rating.comment}</p>
-                    )}
                   </CardContent>
                   <CardFooter className="flex flex-col gap-4">
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
-                      Rated
+                    <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">
+                      Delivered
                     </Badge>
-                    <ReviewModal
+                    <Button 
+                      variant="default" 
+                      className="w-full"
+                      onClick={() => setOpenModalId(order.id)}
+                    >
+                      Update Review
+                    </Button>
+                    <ReviewModal 
+                      isOpen={openModalId === order.id}
+                      onClose={() => setOpenModalId(null)}
                       orderId={order.id}
-                      initialRating={order.rating.rating}
-                      initialComment={order.rating.comment}
-                      isUpdate
+                      productId={order.product.id}
+                      initialRating={{
+                        itemDescriptionAccuracy: order.rating.item_description_accuracy,
+                        communicationSupport: order.rating.communication_support,
+                        deliverySpeed: order.rating.delivery_speed,
+                        overallExperience: order.rating.overall_experience,
+                        comment: order.rating.comment
+                      }}
                       onReviewSubmitted={fetchOrders}
                     />
                   </CardFooter>

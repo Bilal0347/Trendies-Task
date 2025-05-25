@@ -1,16 +1,25 @@
 import { NextResponse } from 'next/server';
 import { supabase, signIn } from '@/lib/auth';
+import { PostgrestError } from '@supabase/supabase-js';
+
+interface OrderWithProduct {
+  status: string;
+  product_id: string;
+  products: {
+    seller_id: string;
+  };
+}
 
 export async function POST(request: Request) {
   try {
     // Ensure we're signed in
     await signIn();
 
-    const { orderId, rating, comment } = await request.json();
+    const { orderId, itemDescriptionAccuracy, communicationSupport, deliverySpeed, overallExperience, comment } = await request.json();
 
-    if (!orderId || !rating) {
+    if (!orderId || !itemDescriptionAccuracy || !communicationSupport || !deliverySpeed || !overallExperience) {
       return NextResponse.json(
-        { error: 'Order ID and rating are required' },
+        { error: 'Order ID and all ratings are required' },
         { status: 400 }
       );
     }
@@ -29,9 +38,15 @@ export async function POST(request: Request) {
     // Check if the order exists and is delivered
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('status, product_id')
+      .select(`
+        status,
+        product_id,
+        products!inner (
+          seller_id
+        )
+      `)
       .eq('id', orderId)
-      .single();
+      .single() as { data: OrderWithProduct | null, error: PostgrestError | null };
 
     if (orderError || !order) {
       console.error('Error fetching order:', orderError);
@@ -45,6 +60,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Can only rate delivered orders' },
         { status: 400 }
+      );
+    }
+
+    // Get seller_id from the product
+    const sellerId = order.products.seller_id;
+    if (!sellerId) {
+      return NextResponse.json(
+        { error: 'Product seller not found' },
+        { status: 404 }
       );
     }
 
@@ -69,7 +93,10 @@ export async function POST(request: Request) {
       const { data, error } = await supabase
         .from('ratings')
         .update({
-          rating,
+          item_description_accuracy: itemDescriptionAccuracy,
+          communication_support: communicationSupport,
+          delivery_speed: deliverySpeed,
+          overall_experience: overallExperience,
           comment,
           updated_at: new Date().toISOString()
         })
@@ -92,8 +119,12 @@ export async function POST(request: Request) {
         .insert({
           user_id: user.id,
           product_id: order.product_id,
+          seller_id: sellerId,
           order_id: orderId,
-          rating,
+          item_description_accuracy: itemDescriptionAccuracy,
+          communication_support: communicationSupport,
+          delivery_speed: deliverySpeed,
+          overall_experience: overallExperience,
           comment,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()

@@ -10,13 +10,11 @@ import { useRouter } from 'next/navigation';
 
 interface RatingProps {
   orderId: string;
-  initialRating?: number;
   initialComment?: string;
   onRatingSubmit?: () => void;
 }
 
-export function Rating({ orderId, initialRating, initialComment, onRatingSubmit }: RatingProps) {
-  const [rating, setRating] = useState(initialRating || 0);
+export function Rating({ orderId, initialComment, onRatingSubmit }: RatingProps) {
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState(initialComment || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,16 +22,38 @@ export function Rating({ orderId, initialRating, initialComment, onRatingSubmit 
   const router = useRouter();
   const supabase = createClientComponentClient();
 
+  // New state for expanded questions
+  const [itemDescriptionAccuracy, setItemDescriptionAccuracy] = useState('');
+  const [sellerCommunicationRating, setSellerCommunicationRating] = useState(0);
+  const [sellerCommunicationComment, setSellerCommunicationComment] = useState('');
+  const [overallSatisfaction, setOverallSatisfaction] = useState('');
+
   const handleRatingSubmit = async () => {
-    if (rating === 0) {
+    // Validation for new fields
+    if (!itemDescriptionAccuracy) {
       toast({
         title: "Error",
-        description: "Please select a rating before submitting",
+        description: "Please answer: Was the item as described?",
         variant: "destructive",
       });
       return;
     }
-
+    if (sellerCommunicationRating === 0) {
+      toast({
+        title: "Error",
+        description: "Please rate the seller&apos;s communication and delivery time.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!overallSatisfaction) {
+      toast({
+        title: "Error",
+        description: "Please answer: How satisfied are you with your purchase overall?",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -69,15 +89,22 @@ export function Rating({ orderId, initialRating, initialComment, onRatingSubmit 
         throw new Error('Failed to check existing rating');
       }
 
+      const ratingPayload = {
+        comment,
+        item_description_accuracy: itemDescriptionAccuracy,
+        seller_communication_rating: sellerCommunicationRating,
+        seller_communication_comment: sellerCommunicationComment,
+        overall_satisfaction: overallSatisfaction,
+        updated_at: new Date().toISOString(),
+        order_id: orderId,
+        user_id: user.id,
+      };
+
       if (existingRating) {
         // Update existing rating
         const { error: updateError } = await supabase
           .from('ratings')
-          .update({
-            rating,
-            comment,
-            updated_at: new Date().toISOString(),
-          })
+          .update(ratingPayload)
           .eq('id', existingRating.id);
 
         if (updateError) {
@@ -87,12 +114,7 @@ export function Rating({ orderId, initialRating, initialComment, onRatingSubmit 
         // Create new rating
         const { error: insertError } = await supabase
           .from('ratings')
-          .insert({
-            order_id: orderId,
-            user_id: user.id,
-            rating,
-            comment,
-          });
+          .insert(ratingPayload);
 
         if (insertError) {
           throw new Error('Failed to create rating');
@@ -122,41 +144,105 @@ export function Rating({ orderId, initialRating, initialComment, onRatingSubmit 
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            type="button"
-            onClick={() => setRating(star)}
-            onMouseEnter={() => setHoverRating(star)}
-            onMouseLeave={() => setHoverRating(0)}
-            className="focus:outline-none"
-          >
-            <Star
-              className={`w-6 h-6 ${
-                star <= (hoverRating || rating)
-                  ? 'fill-yellow-400 text-yellow-400'
-                  : 'text-gray-300'
-              }`}
-            />
-          </button>
-        ))}
+    <div className="space-y-6">
+      {/* 1. Was the item as described? */}
+      <div>
+        <div className="font-medium mb-2">1. Was the item as described?</div>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2">
+            <input type="radio" value="exactly" checked={itemDescriptionAccuracy === 'exactly'} onChange={() => setItemDescriptionAccuracy('exactly')} />
+            Exactly as described
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="slightly" checked={itemDescriptionAccuracy === 'slightly'} onChange={() => setItemDescriptionAccuracy('slightly')} />
+            Slightly different
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="very" checked={itemDescriptionAccuracy === 'very'} onChange={() => setItemDescriptionAccuracy('very')} />
+            Very different
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="not_at_all" checked={itemDescriptionAccuracy === 'not_at_all'} onChange={() => setItemDescriptionAccuracy('not_at_all')} />
+            Not at all as described
+          </label>
+        </div>
       </div>
-      
-      <Textarea
-        placeholder="Write your review (optional)"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        className="min-h-[100px]"
-      />
-      
+
+      {/* 2. Seller's communication and delivery time */}
+      <div>
+        <div className="font-medium mb-2">2. How would you rate the seller's communication and delivery time?</div>
+        <div className="flex items-center gap-2 mb-2">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              type="button"
+              onClick={() => setSellerCommunicationRating(star)}
+              onMouseEnter={() => setHoverRating(star)}
+              onMouseLeave={() => setHoverRating(0)}
+              className="focus:outline-none"
+            >
+              <Star
+                className={`w-6 h-6 ${
+                  star <= (hoverRating || sellerCommunicationRating)
+                    ? 'fill-yellow-400 text-yellow-400'
+                    : 'text-gray-300'
+                }`}
+              />
+            </button>
+          ))}
+        </div>
+        <Textarea
+          placeholder="Comments on communication or delivery (optional)"
+          value={sellerCommunicationComment}
+          onChange={(e) => setSellerCommunicationComment(e.target.value)}
+          className="min-h-[60px]"
+        />
+      </div>
+
+      {/* 3. Overall satisfaction */}
+      <div>
+        <div className="font-medium mb-2">3. How satisfied are you with your purchase overall?</div>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2">
+            <input type="radio" value="very_satisfied" checked={overallSatisfaction === 'very_satisfied'} onChange={() => setOverallSatisfaction('very_satisfied')} />
+            Very satisfied
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="satisfied" checked={overallSatisfaction === 'satisfied'} onChange={() => setOverallSatisfaction('satisfied')} />
+            Satisfied
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="neutral" checked={overallSatisfaction === 'neutral'} onChange={() => setOverallSatisfaction('neutral')} />
+            Neutral
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="dissatisfied" checked={overallSatisfaction === 'dissatisfied'} onChange={() => setOverallSatisfaction('dissatisfied')} />
+            Dissatisfied
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" value="very_dissatisfied" checked={overallSatisfaction === 'very_dissatisfied'} onChange={() => setOverallSatisfaction('very_dissatisfied')} />
+            Very dissatisfied
+          </label>
+        </div>
+      </div>
+
+      {/* 4. Optional written review */}
+      <div>
+        <div className="font-medium mb-2">Would you like to leave a written review? (Optional but valuable for feedback)</div>
+        <Textarea
+          placeholder="Write your review (optional)"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          className="min-h-[100px]"
+        />
+      </div>
+
       <Button
         onClick={handleRatingSubmit}
         disabled={isSubmitting}
         className="w-full"
       >
-        {isSubmitting ? 'Submitting...' : rating ? 'Update Rating' : 'Submit Rating'}
+        {isSubmitting ? 'Submitting...' : 'Submit Rating'}
       </Button>
     </div>
   );

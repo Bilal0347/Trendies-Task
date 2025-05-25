@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, Star } from 'lucide-react';
+import { ShoppingCart, Star, StarHalf } from 'lucide-react';
 import { useState } from 'react';
 
 interface ProductCardProps {
@@ -27,6 +27,45 @@ export function ProductCard({
 }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
 
+  const renderStars = (rating: number) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+
+    // Add full stars
+    for (let i = 1; i <= fullStars; i++) {
+      stars.push(
+        <Star
+          key={`full-${i}`}
+          className="w-4 h-4 fill-yellow-400 text-yellow-400"
+        />
+      );
+    }
+
+    // Add half star if needed
+    if (hasHalfStar) {
+      stars.push(
+        <StarHalf
+          key="half"
+          className="w-4 h-4 fill-yellow-400 text-yellow-400"
+        />
+      );
+    }
+
+    // Add empty stars
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+    for (let i = 1; i <= emptyStars; i++) {
+      stars.push(
+        <Star
+          key={`empty-${i}`}
+          className="w-4 h-4 text-gray-300"
+        />
+      );
+    }
+
+    return stars;
+  };
+
   return (
     <Card className="w-full overflow-hidden">
       <CardHeader className="p-0">
@@ -49,19 +88,12 @@ export function ProductCard({
       </CardHeader>
       <CardContent className="p-4">
         <h3 className="text-lg font-semibold">{name}</h3>
-        <div className="flex items-center gap-1 mt-1">
-          {[1, 2, 3, 4, 5].map((star) => (
-            <Star
-              key={star}
-              className={`w-4 h-4 ${
-                star <= Math.round(averageRating)
-                  ? 'fill-yellow-400 text-yellow-400'
-                  : 'text-gray-300'
-              }`}
-            />
-          ))}
-          <span className="text-sm text-gray-500 ml-1">
-            ({totalRatings})
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-1">
+            {renderStars(averageRating)}
+          </div>
+          <span className="text-sm text-gray-500">
+            ({totalRatings} {totalRatings === 1 ? 'review' : 'reviews'})
           </span>
         </div>
         <p className="text-sm text-gray-500 mt-1">{description}</p>

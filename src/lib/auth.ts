@@ -6,7 +6,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Hardcoded credentials for development
-const TEST_EMAIL = 'bilaltest2@gmail.com';
+const TEST_EMAIL = 'test3@gmail.com';
 const TEST_PASSWORD = 'test1234';
 
 export async function signIn() {
