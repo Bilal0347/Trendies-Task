@@ -170,7 +170,7 @@ export function Rating({ orderId, initialComment, onRatingSubmit }: RatingProps)
 
       {/* 2. Seller's communication and delivery time */}
       <div>
-        <div className="font-medium mb-2">2. How would you rate the seller's communication and delivery time?</div>
+        <div className="font-medium mb-2">2. How would you rate the sellers communication and delivery time?</div>
         <div className="flex items-center gap-2 mb-2">
           {[1, 2, 3, 4, 5].map((star) => (
             <button
